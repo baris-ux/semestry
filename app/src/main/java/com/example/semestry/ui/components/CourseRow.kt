@@ -324,10 +324,25 @@ fun CourseRow(
                         Text("Ajouter une épreuve", fontSize = 13.sp)
                     }
 
-                    // Note calculée
+                    // Formule appliquée
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                     )
+                    Text(
+                        text = when (entry.moyenneType) {
+                            MoyenneType.ARITHMETIQUE ->
+                                "A — Arithmétique : Σ(note × pond.) ÷ Σ(pond.)"
+                            MoyenneType.GEOMETRIQUE  ->
+                                "G — Géométrique : (∏ note^pond.)^(1 / Σ pond.)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp)
+                    )
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                    // Note calculée
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
