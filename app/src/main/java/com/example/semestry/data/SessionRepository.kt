@@ -25,6 +25,17 @@ fun saveSessions(context: Context, sessions: List<SavedSession>) {
                                     put("matiere", g.matiere)
                                     put("note", g.note)
                                     put("coefficient", g.coefficient)
+                                    put("isComposite", g.isComposite)
+                                    put("subGrades", JSONArray().also { sa ->
+                                        g.subGrades.forEach { sg ->
+                                            sa.put(JSONObject().apply {
+                                                put("id", sg.id)
+                                                put("label", sg.label)
+                                                put("note", sg.note)
+                                                put("weight", sg.weight)
+                                            })
+                                        }
+                                    })
                                 })
                             }
                         })
@@ -57,12 +68,25 @@ fun loadSessions(context: Context): List<SavedSession> {
                         name       = b.getString("name"),
                         isExpanded = b.optBoolean("isExpanded", true),
                         grades = (0 until ga.length()).map { k ->
-                            val g = ga.getJSONObject(k)
+                            val g  = ga.getJSONObject(k)
+                            val sa = g.optJSONArray("subGrades")
                             GradeEntry(
                                 id          = g.optString("id", UUID.randomUUID().toString()),
                                 matiere     = g.getString("matiere"),
                                 note        = g.getString("note"),
-                                coefficient = g.getString("coefficient")
+                                coefficient = g.getString("coefficient"),
+                                isComposite = g.optBoolean("isComposite", false),
+                                subGrades   = if (sa != null) {
+                                    (0 until sa.length()).map { si ->
+                                        val sg = sa.getJSONObject(si)
+                                        SubGrade(
+                                            id     = sg.optString("id", UUID.randomUUID().toString()),
+                                            label  = sg.optString("label", ""),
+                                            note   = sg.optString("note", ""),
+                                            weight = sg.optString("weight", "1")
+                                        )
+                                    }
+                                } else listOf(SubGrade(label = "CC"), SubGrade(label = "Partiel", weight = "2"))
                             )
                         }
                     )

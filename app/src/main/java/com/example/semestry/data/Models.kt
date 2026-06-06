@@ -2,11 +2,23 @@ package com.example.semestry.data
 
 import java.util.UUID
 
+data class SubGrade(
+    val id: String = UUID.randomUUID().toString(),
+    val label: String = "",
+    val note: String = "",
+    val weight: String = "1"
+)
+
 data class GradeEntry(
     val id: String = UUID.randomUUID().toString(),
     val matiere: String = "",
     val note: String = "",
-    val coefficient: String = "1"
+    val coefficient: String = "1",
+    val isComposite: Boolean = false,
+    val subGrades: List<SubGrade> = listOf(
+        SubGrade(label = "CC"),
+        SubGrade(label = "Partiel", weight = "2")
+    )
 )
 
 data class CourseBlock(

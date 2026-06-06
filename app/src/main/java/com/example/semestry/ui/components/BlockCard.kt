@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -26,11 +25,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.semestry.data.CourseBlock
@@ -50,7 +50,13 @@ fun BlockCard(
     onMatiereChange: (Int, String) -> Unit,
     onNoteChange: (Int, String) -> Unit,
     onCoeffChange: (Int, String) -> Unit,
-    onDeleteGrade: (Int) -> Unit
+    onDeleteGrade: (Int) -> Unit,
+    onToggleComposite: (Int) -> Unit,
+    onSubGradeAdd: (Int) -> Unit,
+    onSubGradeLabelChange: (Int, Int, String) -> Unit,
+    onSubGradeNoteChange: (Int, Int, String) -> Unit,
+    onSubGradeWeightChange: (Int, Int, String) -> Unit,
+    onSubGradeDelete: (Int, Int) -> Unit
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -80,6 +86,21 @@ fun BlockCard(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 )
+                if (!block.isExpanded) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "${block.grades.size} cours",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                 if (canDeleteBlock) {
                     IconButton(onClick = onDeleteBlock) {
                         Icon(
@@ -91,7 +112,6 @@ fun BlockCard(
                 }
             }
 
-            // Block courses (collapsible)
             AnimatedVisibility(
                 visible = block.isExpanded,
                 enter = expandVertically(),
@@ -108,16 +128,22 @@ fun BlockCard(
                             )
                         }
                         CourseRow(
-                            index = gi + 1,
-                            entry = entry,
-                            showCoeff = showCoeff,
-                            canDelete = block.grades.size > 1,
-                            minGrade = minGradeMap[entry.id],
+                            index           = gi + 1,
+                            entry           = entry,
+                            showCoeff       = showCoeff,
+                            canDelete       = block.grades.size > 1,
+                            minGrade        = minGradeMap[entry.id],
                             targetAvgParsed = targetAvgParsed,
                             onMatiereChange = { onMatiereChange(gi, it) },
                             onNoteChange    = { onNoteChange(gi, it) },
                             onCoeffChange   = { onCoeffChange(gi, it) },
-                            onDelete        = { onDeleteGrade(gi) }
+                            onDelete        = { onDeleteGrade(gi) },
+                            onToggleComposite     = { onToggleComposite(gi) },
+                            onSubGradeAdd         = { onSubGradeAdd(gi) },
+                            onSubGradeLabelChange  = { si, v -> onSubGradeLabelChange(gi, si, v) },
+                            onSubGradeNoteChange   = { si, v -> onSubGradeNoteChange(gi, si, v) },
+                            onSubGradeWeightChange = { si, v -> onSubGradeWeightChange(gi, si, v) },
+                            onSubGradeDelete       = { si -> onSubGradeDelete(gi, si) }
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
