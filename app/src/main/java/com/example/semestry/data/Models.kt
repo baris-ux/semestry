@@ -18,22 +18,15 @@ data class GradeEntry(
     val subGrades: List<SubGrade> = listOf(
         SubGrade(label = "CC"),
         SubGrade(label = "Partiel", weight = "2")
-    )
-)
-
-data class CourseBlock(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String = "",
-    val grades: List<GradeEntry> = listOf(GradeEntry()),
-    val isExpanded: Boolean = true
+    ),
+    val moyenneType: MoyenneType = MoyenneType.ARITHMETIQUE
 )
 
 enum class MoyenneType { ARITHMETIQUE, GEOMETRIQUE }
 
 data class SavedSession(
     val name: String,
-    val type: MoyenneType,
-    val blocks: List<CourseBlock>,
+    val grades: List<GradeEntry>,
     val targetAverage: String = "10"
 )
 

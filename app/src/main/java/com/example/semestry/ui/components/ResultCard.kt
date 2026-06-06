@@ -31,11 +31,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.semestry.data.MoyenneType
 import com.example.semestry.data.Stats
 
 @Composable
-fun ResultCard(result: Double, type: MoyenneType, stats: Stats?) {
+fun ResultCard(result: Double, label: String, stats: Stats?) {
     val (mention, mentionColor) = when {
         result >= 16.0 -> "Très Bien"   to Color(0xFF2E7D32)
         result >= 14.0 -> "Bien"        to Color(0xFF388E3C)
@@ -65,7 +64,7 @@ fun ResultCard(result: Double, type: MoyenneType, stats: Stats?) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                "Moyenne ${if (type == MoyenneType.ARITHMETIQUE) "arithmétique" else "géométrique"}",
+                label,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f)
             )

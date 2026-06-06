@@ -1,6 +1,5 @@
 package com.example.semestry.ui
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -18,15 +17,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.semestry.data.CourseBlock
 import com.example.semestry.data.GradeEntry
 import com.example.semestry.data.MoyenneType
 import com.example.semestry.data.SavedSession
@@ -59,13 +57,11 @@ import com.example.semestry.data.Stats
 import com.example.semestry.data.SubGrade
 import com.example.semestry.data.loadSessions
 import com.example.semestry.data.saveSessions
-import com.example.semestry.ui.components.BlockCard
-import com.example.semestry.ui.components.MoyenneTypeSelector
+import com.example.semestry.ui.components.CourseRow
 import com.example.semestry.ui.components.ResultCard
 import com.example.semestry.ui.components.SessionsPanel
 import com.example.semestry.utils.computeCompositeNote
 import com.example.semestry.utils.computeMinGrade
-import com.example.semestry.utils.computeMinGradeGeometric
 import kotlinx.coroutines.delay
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -73,109 +69,104 @@ import kotlin.math.sqrt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoyenneCalculatorScreen() {
-    val context = LocalContext.current
+    val context   = LocalContext.current
     val listState = rememberLazyListState()
 
     // ── State ──────────────────────────────────────────────────────────────────
-    var moyenneType    by remember { mutableStateOf(MoyenneType.ARITHMETIQUE) }
-    var blocks         by remember { mutableStateOf(listOf(CourseBlock(name = "Bloc 1"))) }
-    var targetAverage  by remember { mutableStateOf("10") }
-    var result         by remember { mutableStateOf<Double?>(null) }
-    var stats          by remember { mutableStateOf<Stats?>(null) }
-    var errorMessage   by remember { mutableStateOf<String?>(null) }
-    var savedSessions  by remember { mutableStateOf(loadSessions(context)) }
+    var grades        by remember { mutableStateOf(listOf(GradeEntry())) }
+    var targetAverage by remember { mutableStateOf("10") }
+    var savedSessions by remember { mutableStateOf(loadSessions(context)) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var sessionName    by remember { mutableStateOf("") }
     var showSessions   by remember { mutableStateOf(false) }
 
-    // ── Derived values ─────────────────────────────────────────────────────────
+    // ── Valeurs dérivées ───────────────────────────────────────────────────────
     val targetAvgParsed: Double? =
         targetAverage.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
 
-    val allFilledParsed: Map<String, Pair<Double, Double>> =
-        blocks.flatMap { it.grades }.mapNotNull { g ->
-            val n = if (g.isComposite) computeCompositeNote(g.subGrades)
-                    else g.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
-            val c = g.coefficient.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 }
-            if (n != null && c != null) g.id to (n to c) else null
-        }.toMap()
+    // Coefficient effectif : somme des poids pour un cours composite, coeff manuel sinon
+    fun effectiveCoeff(g: GradeEntry): Double? = if (g.isComposite)
+        g.subGrades.sumOf { sg -> sg.weight.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 } ?: 0.0 }
+            .takeIf { it > 0 }
+    else
+        g.coefficient.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 }
 
-    val minGradeMap: Map<String, Double?> =
-        blocks.flatMap { it.grades }
-            .filter { g -> !g.isComposite && g.note.isEmpty() }
-            .associate { g ->
-                val thisCoeff = g.coefficient.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 }
-                val others    = allFilledParsed.filterKeys { it != g.id }.values.toList()
-                val min = if (thisCoeff != null && targetAvgParsed != null) when (moyenneType) {
-                    MoyenneType.ARITHMETIQUE -> computeMinGrade(targetAvgParsed, thisCoeff, others)
-                    MoyenneType.GEOMETRIQUE  -> computeMinGradeGeometric(targetAvgParsed, thisCoeff, others)
-                } else null
-                g.id to min
-            }
+    val allFilledParsed: Map<String, Pair<Double, Double>> = grades.mapNotNull { g ->
+        val n = if (g.isComposite) computeCompositeNote(g.subGrades, g.moyenneType)
+                else g.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
+        val c = effectiveCoeff(g)
+        if (n != null && c != null) g.id to (n to c) else null
+    }.toMap()
 
-    // ── Block helpers ──────────────────────────────────────────────────────────
-    fun updateBlock(bi: Int, updated: CourseBlock) {
-        blocks = blocks.toMutableList().also { it[bi] = updated }
-    }
-    fun updateGrade(bi: Int, gi: Int, updated: GradeEntry) {
-        val b = blocks[bi]
-        updateBlock(bi, b.copy(grades = b.grades.toMutableList().also { it[gi] = updated }))
-    }
-    fun updateSubGrade(bi: Int, gi: Int, si: Int, updated: SubGrade) {
-        val g = blocks[bi].grades[gi]
-        updateGrade(bi, gi, g.copy(subGrades = g.subGrades.toMutableList().also { it[si] = updated }))
-    }
+    // Note min pour chaque cours vide (mode simple uniquement)
+    val minGradeMap: Map<String, Double?> = grades
+        .filter { g -> !g.isComposite && g.note.isEmpty() }
+        .associate { g ->
+            val thisCoeff = effectiveCoeff(g)
+            val others    = allFilledParsed.filterKeys { it != g.id }.values.toList()
+            val min = if (thisCoeff != null && targetAvgParsed != null)
+                computeMinGrade(targetAvgParsed, thisCoeff, others) else null
+            g.id to min
+        }
 
-    // ── Calculate ──────────────────────────────────────────────────────────────
-    fun calculate() {
-        errorMessage = null; result = null; stats = null
-        val all = blocks.flatMap { it.grades }
-        if (all.isEmpty()) { errorMessage = "Ajoutez au moins un cours."; return }
+    // ── Calcul réactif ─────────────────────────────────────────────────────────
+    var result: Double?    = null
+    var stats: Stats?      = null
+    var liveError: String? = null
+
+    if (grades.isNotEmpty()) {
         val parsed = mutableListOf<Pair<Double, Double>>()
-        for (g in all) {
-            val n = if (g.isComposite) {
-                computeCompositeNote(g.subGrades) ?: run {
-                    val name = g.matiere.ifBlank { "un cours" }
-                    errorMessage = "Remplissez toutes les épreuves de « $name »."; return
+        var complete = true
+        for (g in grades) {
+            val c = effectiveCoeff(g)
+            val n: Double? = if (g.isComposite) {
+                // Détecter zéro géométrique avant computeCompositeNote
+                if (g.moyenneType == MoyenneType.GEOMETRIQUE &&
+                    g.subGrades.all { sg ->
+                        sg.note.replace(",", ".").toDoubleOrNull()?.let { it in 0.0..20.0 } != null &&
+                        sg.weight.replace(",", ".").toDoubleOrNull()?.let { it > 0 } != null
+                    } &&
+                    g.subGrades.any { sg -> sg.note.replace(",", ".").toDoubleOrNull() == 0.0 }
+                ) {
+                    val nom = g.matiere.ifBlank { "sans nom" }
+                    liveError = "Moyenne géométrique indéfinie dans \"$nom\" : une note partielle vaut 0."
+                    complete = false; break
                 }
-            } else {
-                val v = g.note.replace(",", ".").toDoubleOrNull()
-                if (v == null) { errorMessage = "Remplissez toutes les notes et coefficients."; return }
-                if (v < 0 || v > 20) { errorMessage = "Les notes doivent être entre 0 et 20."; return }
-                v
-            }
-            val c = g.coefficient.replace(",", ".").toDoubleOrNull()
-            if (c == null || c <= 0) { errorMessage = "Les coefficients doivent être > 0."; return }
+                computeCompositeNote(g.subGrades, g.moyenneType)
+            } else g.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
+            if (n == null || c == null) { complete = false; break }
             parsed.add(n to c)
         }
-        val moyenne = when (moyenneType) {
-            MoyenneType.ARITHMETIQUE ->
-                parsed.sumOf { (n, c) -> n * c } / parsed.sumOf { (_, c) -> c }
-            MoyenneType.GEOMETRIQUE  -> {
-                if (parsed.any { (n, _) -> n == 0.0 }) {
-                    errorMessage = "Moyenne géométrique indéfinie : une note vaut 0."; return
-                }
-                val totalCoeff = parsed.sumOf { (_, c) -> c }
-                parsed.fold(1.0) { acc, (n, c) -> acc * n.pow(c) }.pow(1.0 / totalCoeff)
-            }
-        }
-        val notes    = parsed.map { it.first }
-        val mean     = notes.average()
-        val variance = notes.sumOf { (it - mean).pow(2) } / notes.size
-        stats  = Stats(notes.min(), notes.max(), sqrt(variance))
-        result = moyenne
-    }
-
-    // ── Auto-scroll to result ──────────────────────────────────────────────────
-    LaunchedEffect(result) {
-        if (result != null) {
-            delay(150L)
-            val lastIndex = listState.layoutInfo.totalItemsCount - 1
-            if (lastIndex >= 0) listState.animateScrollToItem(lastIndex)
+        if (complete) {
+            val moyenne  = parsed.sumOf { (n, c) -> n * c } / parsed.sumOf { (_, c) -> c }
+            val notes    = parsed.map { it.first }
+            val mean     = notes.average()
+            val variance = notes.sumOf { (it - mean).pow(2) } / notes.size
+            result = moyenne
+            stats  = Stats(notes.min(), notes.max(), sqrt(variance))
         }
     }
 
-    // ── Save dialog ────────────────────────────────────────────────────────────
+    // ── Auto-scroll vers le résultat (quand il apparaît) ──────────────────────
+    val resultVisible = result != null
+    LaunchedEffect(resultVisible) {
+        if (resultVisible) {
+            delay(100L)
+            val last = listState.layoutInfo.totalItemsCount - 1
+            if (last >= 0) listState.animateScrollToItem(last)
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    fun updateGrade(gi: Int, updated: GradeEntry) {
+        grades = grades.toMutableList().also { it[gi] = updated }
+    }
+    fun updateSubGrade(gi: Int, si: Int, updated: SubGrade) {
+        val g = grades[gi]
+        updateGrade(gi, g.copy(subGrades = g.subGrades.toMutableList().also { it[si] = updated }))
+    }
+
+    // ── Dialogue de sauvegarde ─────────────────────────────────────────────────
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false; sessionName = "" },
@@ -193,7 +184,7 @@ fun MoyenneCalculatorScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     if (sessionName.isNotBlank()) {
-                        val s = SavedSession(sessionName.trim(), moyenneType, blocks, targetAverage)
+                        val s = SavedSession(sessionName.trim(), grades, targetAverage)
                         savedSessions = savedSessions.filter { it.name != s.name } + s
                         saveSessions(context, savedSessions)
                         showSaveDialog = false; sessionName = ""
@@ -233,13 +224,6 @@ fun MoyenneCalculatorScreen() {
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { calculate() },
-                icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
-                text = { Text("Calculer", fontWeight = FontWeight.SemiBold) }
-            )
         }
     ) { paddingValues ->
         LazyColumn(
@@ -249,9 +233,9 @@ fun MoyenneCalculatorScreen() {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 104.dp)
+            contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // Sessions panel
+            // Panneau des sessions
             item {
                 AnimatedVisibility(
                     visible = showSessions,
@@ -261,11 +245,9 @@ fun MoyenneCalculatorScreen() {
                     SessionsPanel(
                         sessions = savedSessions,
                         onLoad = { s ->
-                            moyenneType   = s.type
-                            blocks        = s.blocks
+                            grades        = s.grades
                             targetAverage = s.targetAverage
-                            result = null; stats = null; errorMessage = null
-                            showSessions = false
+                            showSessions  = false
                         },
                         onDelete = { s ->
                             savedSessions = savedSessions - s
@@ -275,38 +257,7 @@ fun MoyenneCalculatorScreen() {
                 }
             }
 
-            // Type selector
-            item {
-                MoyenneTypeSelector(selected = moyenneType, onSelect = {
-                    moyenneType = it; result = null; errorMessage = null
-                })
-            }
-
-            // Description
-            item {
-                AnimatedContent(targetState = moyenneType, label = "desc") { type ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = when (type) {
-                                MoyenneType.ARITHMETIQUE ->
-                                    "Moyenne pondérée : somme(note × coeff) ÷ somme(coeff)."
-                                MoyenneType.GEOMETRIQUE  ->
-                                    "Moyenne géométrique pondérée : (∏ note^coeff)^(1 / ∑ coeff)."
-                            },
-                            modifier = Modifier.padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Target average
+            // Objectif
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -327,7 +278,7 @@ fun MoyenneCalculatorScreen() {
                         label = { Text("Cible") },
                         suffix = { Text("/20") },
                         isError = targetAvgParsed == null && targetAverage.isNotEmpty(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.width(130.dp)
@@ -335,66 +286,52 @@ fun MoyenneCalculatorScreen() {
                 }
             }
 
-            // Course blocks
-            itemsIndexed(blocks) { bi, block ->
-                BlockCard(
-                    block            = block,
-                    showCoeff        = true,
-                    canDeleteBlock   = blocks.size > 1,
-                    minGradeMap      = minGradeMap,
-                    targetAvgParsed  = targetAvgParsed,
-                    onBlockNameChange = { updateBlock(bi, block.copy(name = it)) },
-                    onToggleExpand    = { updateBlock(bi, block.copy(isExpanded = !block.isExpanded)) },
-                    onDeleteBlock     = {
-                        blocks = blocks.toMutableList().also { it.removeAt(bi) }
-                        result = null
-                    },
-                    onAddGrade    = { updateBlock(bi, block.copy(grades = block.grades + GradeEntry())) },
-                    onMatiereChange = { gi, v -> updateGrade(bi, gi, block.grades[gi].copy(matiere = v)) },
-                    onNoteChange    = { gi, v -> updateGrade(bi, gi, block.grades[gi].copy(note = v)); result = null },
-                    onCoeffChange   = { gi, v -> updateGrade(bi, gi, block.grades[gi].copy(coefficient = v)); result = null },
-                    onDeleteGrade   = { gi ->
-                        updateBlock(bi, block.copy(
-                            grades = block.grades.toMutableList().also { it.removeAt(gi) }
-                        ))
-                        result = null
-                    },
-                    onToggleComposite = { gi ->
-                        updateGrade(bi, gi, block.grades[gi].copy(isComposite = !block.grades[gi].isComposite))
-                        result = null
-                    },
-                    onSubGradeAdd = { gi ->
-                        updateGrade(bi, gi, block.grades[gi].copy(
-                            subGrades = block.grades[gi].subGrades + SubGrade()
-                        ))
-                    },
-                    onSubGradeLabelChange  = { gi, si, v -> updateSubGrade(bi, gi, si, block.grades[gi].subGrades[si].copy(label = v)) },
-                    onSubGradeNoteChange   = { gi, si, v -> updateSubGrade(bi, gi, si, block.grades[gi].subGrades[si].copy(note = v)); result = null },
-                    onSubGradeWeightChange = { gi, si, v -> updateSubGrade(bi, gi, si, block.grades[gi].subGrades[si].copy(weight = v)); result = null },
-                    onSubGradeDelete       = { gi, si ->
-                        updateGrade(bi, gi, block.grades[gi].copy(
-                            subGrades = block.grades[gi].subGrades.toMutableList().also { it.removeAt(si) }
-                        ))
-                        result = null
+            // Cours
+            itemsIndexed(grades) { gi, grade ->
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        CourseRow(
+                            index           = gi + 1,
+                            entry           = grade,
+                            showCoeff       = grades.size > 1,
+                            canDelete       = grades.size > 1,
+                            minGrade        = minGradeMap[grade.id],
+                            targetAvgParsed = targetAvgParsed,
+                            onMatiereChange = { updateGrade(gi, grade.copy(matiere = it)) },
+                            onNoteChange    = { updateGrade(gi, grade.copy(note = it)) },
+                            onCoeffChange   = { updateGrade(gi, grade.copy(coefficient = it)) },
+                            onDelete        = { grades = grades.toMutableList().also { it.removeAt(gi) } },
+                            onToggleComposite = { updateGrade(gi, grade.copy(isComposite = !grade.isComposite)) },
+                            onMoyenneTypeChange = { updateGrade(gi, grade.copy(moyenneType = it)) },
+                            onSubGradeAdd   = { updateGrade(gi, grade.copy(subGrades = grade.subGrades + SubGrade())) },
+                            onSubGradeLabelChange  = { si, v -> updateSubGrade(gi, si, grade.subGrades[si].copy(label = v)) },
+                            onSubGradeNoteChange   = { si, v -> updateSubGrade(gi, si, grade.subGrades[si].copy(note = v)) },
+                            onSubGradeWeightChange = { si, v -> updateSubGrade(gi, si, grade.subGrades[si].copy(weight = v)) },
+                            onSubGradeDelete       = { si ->
+                                updateGrade(gi, grade.copy(
+                                    subGrades = grade.subGrades.toMutableList().also { it.removeAt(si) }
+                                ))
+                            }
+                        )
                     }
-                )
+                }
             }
 
-            // Add block
+            // Bouton ajouter un cours
             item {
                 OutlinedButton(
-                    onClick = { blocks = blocks + CourseBlock(name = "Bloc ${blocks.size + 1}") },
+                    onClick = { grades = grades + GradeEntry() },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Ajouter un bloc")
+                    Text("Ajouter un cours")
                 }
             }
 
-            // Error
-            if (errorMessage != null) {
+            // Erreur (ex: note 0 en géométrique)
+            if (liveError != null) {
                 item {
                     Card(
                         colors = CardDefaults.cardColors(
@@ -404,7 +341,7 @@ fun MoyenneCalculatorScreen() {
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            errorMessage!!,
+                            liveError,
                             modifier = Modifier.padding(12.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall
@@ -413,9 +350,9 @@ fun MoyenneCalculatorScreen() {
                 }
             }
 
-            // Result
+            // Résultat
             if (result != null) {
-                item { ResultCard(result = result!!, type = moyenneType, stats = stats) }
+                item { ResultCard(result = result, label = "Moyenne pondérée", stats = stats) }
             }
         }
     }

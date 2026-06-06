@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -40,9 +45,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.semestry.data.GradeEntry
+import com.example.semestry.data.MoyenneType
 import com.example.semestry.data.SubGrade
 import com.example.semestry.utils.coeffError
 import com.example.semestry.utils.computeCompositeNote
+import com.example.semestry.utils.computeMinGrade
+import com.example.semestry.utils.computeMinGradeGeometric
 import com.example.semestry.utils.noteError
 
 private fun gradeColor(value: Double): Color = when {
@@ -66,12 +74,14 @@ fun CourseRow(
     onCoeffChange: (String) -> Unit,
     onDelete: () -> Unit,
     onToggleComposite: () -> Unit,
+    onMoyenneTypeChange: (MoyenneType) -> Unit,
     onSubGradeAdd: () -> Unit,
     onSubGradeLabelChange: (Int, String) -> Unit,
     onSubGradeNoteChange: (Int, String) -> Unit,
     onSubGradeWeightChange: (Int, String) -> Unit,
     onSubGradeDelete: (Int) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     val nErr = if (!entry.isComposite) noteError(entry.note) else null
     val cErr = if (showCoeff) coeffError(entry.coefficient) else null
 
@@ -79,7 +89,7 @@ fun CourseRow(
     val noteValue = if (validNote) entry.note.replace(",", ".").toDoubleOrNull() else null
     val dotColor  = noteValue?.let { gradeColor(it) }
 
-    val compositeNote = if (entry.isComposite) computeCompositeNote(entry.subGrades) else null
+    val compositeNote = if (entry.isComposite) computeCompositeNote(entry.subGrades, entry.moyenneType) else null
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
 
@@ -96,8 +106,42 @@ fun CourseRow(
                 placeholder = { Text("ex: Maths") },
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                 modifier = Modifier.weight(1f)
             )
+            // Toggle A/G visible uniquement en mode composite
+            AnimatedVisibility(
+                visible = entry.isComposite,
+                enter = expandHorizontally(),
+                exit = shrinkHorizontally()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    MoyenneType.entries.forEach { type ->
+                        val sel = type == entry.moyenneType
+                        Surface(
+                            onClick = { onMoyenneTypeChange(type) },
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (sel) MaterialTheme.colorScheme.primary else Color.Transparent
+                        ) {
+                            Text(
+                                text = if (type == MoyenneType.ARITHMETIQUE) "A" else "G",
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
             IconButton(onClick = onToggleComposite) {
                 Icon(
                     imageVector = Icons.Default.Layers,
@@ -135,7 +179,8 @@ fun CourseRow(
                         suffix = { Text("/20") },
                         isError = nErr != null,
                         supportingText = if (nErr != null) ({ Text(nErr) }) else null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         leadingIcon = if (dotColor != null) {
@@ -155,7 +200,8 @@ fun CourseRow(
                             label = { Text("Coeff.") },
                             isError = cErr != null,
                             supportingText = if (cErr != null) ({ Text(cErr) }) else null,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -231,13 +277,37 @@ fun CourseRow(
                         Spacer(Modifier.width(40.dp))
                     }
 
+                    // Note min par épreuve vide
+                    val filledSubGrades = entry.subGrades.mapNotNull { sg ->
+                        val n = sg.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
+                        val w = sg.weight.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 }
+                        if (n != null && w != null) sg.id to (n to w) else null
+                    }.toMap()
+
                     entry.subGrades.forEachIndexed { si, sg ->
                         if (si > 0) HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                         )
+                        val subHint: String? = if (sg.note.isEmpty() && targetAvgParsed != null) {
+                            val w = sg.weight.replace(",", ".").toDoubleOrNull()?.takeIf { it > 0 }
+                            val others = filledSubGrades.filterKeys { it != sg.id }.values.toList()
+                            if (w != null) {
+                                val min = when (entry.moyenneType) {
+                                    MoyenneType.ARITHMETIQUE -> computeMinGrade(targetAvgParsed, w, others)
+                                    MoyenneType.GEOMETRIQUE  -> computeMinGradeGeometric(targetAvgParsed, w, others)
+                                }
+                                when {
+                                    min > 20 -> "Objectif impossible dans cette épreuve (> 20)"
+                                    min < 0  -> "Objectif déjà atteint ✓"
+                                    else     -> "Min. pour %.1f/20 : %.2f / 20".format(targetAvgParsed, min)
+                                }
+                            } else null
+                        } else null
+
                         SubGradeRow(
                             sg        = sg,
                             canDelete = entry.subGrades.size > 1,
+                            hint      = subHint,
                             onLabelChange  = { onSubGradeLabelChange(si, it) },
                             onNoteChange   = { onSubGradeNoteChange(si, it) },
                             onWeightChange = { onSubGradeWeightChange(si, it) },
@@ -290,24 +360,6 @@ fun CourseRow(
             }
         }
 
-        // ── Coefficient dans le bloc (composite) ──────────────────────────────
-        AnimatedVisibility(
-            visible = entry.isComposite && showCoeff,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            OutlinedTextField(
-                value = entry.coefficient,
-                onValueChange = { if (it.length <= 5) onCoeffChange(it) },
-                label = { Text("Coeff. dans le bloc") },
-                isError = cErr != null,
-                supportingText = if (cErr != null) ({ Text(cErr) }) else null,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.width(180.dp)
-            )
-        }
     }
 }
 
@@ -315,14 +367,17 @@ fun CourseRow(
 private fun SubGradeRow(
     sg: SubGrade,
     canDelete: Boolean,
+    hint: String?,
     onLabelChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     onWeightChange: (String) -> Unit,
     onDelete: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     val nErr = noteError(sg.note)
     val wErr = coeffError(sg.weight)
 
+    Column {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -334,6 +389,8 @@ private fun SubGradeRow(
             placeholder = { Text("ex: CC") },
             singleLine = true,
             shape = RoundedCornerShape(8.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
             modifier = Modifier.weight(2f)
         )
         OutlinedTextField(
@@ -341,7 +398,8 @@ private fun SubGradeRow(
             onValueChange = { if (it.length <= 5) onNoteChange(it) },
             suffix = { Text("/20") },
             isError = nErr != null,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
             singleLine = true,
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.weight(2f)
@@ -350,7 +408,8 @@ private fun SubGradeRow(
             value = sg.weight,
             onValueChange = { if (it.length <= 5) onWeightChange(it) },
             isError = wErr != null,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
             singleLine = true,
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.weight(1f)
@@ -368,5 +427,26 @@ private fun SubGradeRow(
                 modifier = Modifier.size(18.dp)
             )
         }
+    }
+    if (hint != null) {
+        val hintColor = when {
+            hint.startsWith("Objectif impossible") -> MaterialTheme.colorScheme.error
+            hint.startsWith("Objectif déjà")       -> Color(0xFF2E7D32)
+            else                                    -> MaterialTheme.colorScheme.primary
+        }
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = hintColor.copy(alpha = 0.1f),
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+        ) {
+            Text(
+                "💡 $hint",
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                color = hintColor,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
     }
 }

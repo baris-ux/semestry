@@ -1,5 +1,6 @@
 package com.example.semestry.utils
 
+import com.example.semestry.data.MoyenneType
 import com.example.semestry.data.SubGrade
 import kotlin.math.pow
 
@@ -15,8 +16,8 @@ fun coeffError(coeff: String): String? {
     return if (v <= 0) "Doit être > 0" else null
 }
 
-// Weighted average of sub-grades — returns null if any sub-grade is missing/invalid
-fun computeCompositeNote(subGrades: List<SubGrade>): Double? {
+// Weighted average of sub-grades — returns null if any sub-grade is missing/invalid or geo zero
+fun computeCompositeNote(subGrades: List<SubGrade>, type: MoyenneType = MoyenneType.ARITHMETIQUE): Double? {
     if (subGrades.isEmpty()) return null
     val parsed = subGrades.mapNotNull { sg ->
         val n = sg.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
@@ -24,7 +25,14 @@ fun computeCompositeNote(subGrades: List<SubGrade>): Double? {
         if (n != null && w != null) n to w else null
     }
     if (parsed.size != subGrades.size) return null
-    return parsed.sumOf { (n, w) -> n * w } / parsed.sumOf { (_, w) -> w }
+    return when (type) {
+        MoyenneType.ARITHMETIQUE ->
+            parsed.sumOf { (n, w) -> n * w } / parsed.sumOf { (_, w) -> w }
+        MoyenneType.GEOMETRIQUE ->
+            if (parsed.any { (n, _) -> n == 0.0 }) null
+            else parsed.fold(1.0) { acc, (n, w) -> acc * n.pow(w) }
+                .pow(1.0 / parsed.sumOf { (_, w) -> w })
+    }
 }
 
 // Arithmetic: (∑ n*c + min*thisCoeff) / ∑c = target  →  min = (target*∑c - ∑n*c) / thisCoeff

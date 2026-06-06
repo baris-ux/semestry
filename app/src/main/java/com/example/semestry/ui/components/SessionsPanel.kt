@@ -22,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.semestry.data.MoyenneType
 import com.example.semestry.data.SavedSession
 
 @Composable
@@ -70,13 +69,8 @@ fun SessionsPanel(
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                            val totalCours = session.blocks.sumOf { it.grades.size }
                             Text(
-                                "$totalCours cours · ${session.blocks.size} bloc(s) · " +
-                                    when (session.type) {
-                                        MoyenneType.ARITHMETIQUE -> "Arithmétique"
-                                        MoyenneType.GEOMETRIQUE  -> "Géométrique"
-                                    },
+                                "${session.grades.size} cours",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                             )
