@@ -12,13 +12,13 @@ val keyProps = Properties().apply {
 }
 
 android {
-    namespace = "com.example.semestry"
+    namespace = "io.github.baris_ux.semestry"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.semestry"
+        applicationId = "io.github.baris_ux.semestry"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
