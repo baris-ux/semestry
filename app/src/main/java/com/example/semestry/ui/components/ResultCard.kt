@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.example.semestry.data.Stats
 
 @Composable
-fun ResultCard(result: Double, label: String, stats: Stats?) {
+fun ResultCard(result: Double, label: String, stats: Stats?, credits: Pair<Int, Int>? = null) {
     val (mention, mentionColor) = when {
         result >= 16.0 -> "Très Bien"   to Color(0xFF2E7D32)
         result >= 14.0 -> "Bien"        to Color(0xFF388E3C)
@@ -116,6 +116,23 @@ fun ResultCard(result: Double, label: String, stats: Stats?) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
+            }
+
+            if (credits != null) {
+                val (obtained, total) = credits
+                val creditsColor = if (obtained >= total) Color(0xFF2E7D32) else Color(0xFFF57C00)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = creditsColor.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        "$obtained / $total ECTS validés",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        color = creditsColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
             }
 
             if (stats != null) {

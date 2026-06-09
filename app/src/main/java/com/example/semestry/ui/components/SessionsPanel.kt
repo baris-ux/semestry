@@ -70,7 +70,7 @@ fun SessionsPanel(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Text(
-                                "${session.grades.size} cours",
+                                "${session.ues.sumOf { it.courses.size }} cours · ${session.ues.size} UE${if (session.ues.size > 1) "s" else ""}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                             )
