@@ -16,10 +16,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.app.Activity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,8 +58,10 @@ import com.example.semestry.data.SubGrade
 import com.example.semestry.data.UE
 import com.example.semestry.data.loadSessions
 import com.example.semestry.data.saveSessions
+import com.example.semestry.ads.RewardedAdManager
 import com.example.semestry.ui.components.ResultCard
 import com.example.semestry.ui.components.SessionsPanel
+import com.example.semestry.ui.components.SimulationDialog
 import com.example.semestry.ui.components.UECard
 import com.example.semestry.utils.computeEffectiveNote
 import com.example.semestry.utils.computeUEAverage
@@ -114,11 +118,13 @@ fun MoyenneCalculatorScreen() {
     val listState = rememberLazyListState()
 
     // ── State ──────────────────────────────────────────────────────────────────
-    var ues           by remember { mutableStateOf(listOf(UE())) }
-    var savedSessions by remember { mutableStateOf(loadSessions(context)) }
-    var showSaveDialog by remember { mutableStateOf(false) }
-    var sessionName   by remember { mutableStateOf("") }
-    var showSessions  by remember { mutableStateOf(false) }
+    var ues              by remember { mutableStateOf(listOf(UE())) }
+    var savedSessions    by remember { mutableStateOf(loadSessions(context)) }
+    var showSaveDialog   by remember { mutableStateOf(false) }
+    var sessionName      by remember { mutableStateOf("") }
+    var showSessions     by remember { mutableStateOf(false) }
+    var showSimulation   by remember { mutableStateOf(false) }
+    var adNotReady       by remember { mutableStateOf(false) }
 
     val calcState = remember(ues) { computeCalcState(ues) }
     val result    = calcState.result
@@ -145,6 +151,11 @@ fun MoyenneCalculatorScreen() {
     fun updateSubGrade(ui: Int, ci: Int, si: Int, updated: SubGrade) {
         val g = ues[ui].courses[ci]
         updateCourse(ui, ci, g.copy(subGrades = g.subGrades.toMutableList().also { it[si] = updated }))
+    }
+
+    // ── Dialogue simulation ────────────────────────────────────────────────────
+    if (showSimulation) {
+        SimulationDialog(ues = ues, onDismiss = { showSimulation = false })
     }
 
     // ── Dialogue de sauvegarde ─────────────────────────────────────────────────
@@ -299,6 +310,53 @@ fun MoyenneCalculatorScreen() {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Ajouter une UE")
+                }
+            }
+
+            item {
+                val activity = context as? Activity
+                OutlinedButton(
+                    onClick = {
+                        adNotReady = false
+                        if (!RewardedAdManager.isReady()) {
+                            adNotReady = true
+                            RewardedAdManager.load(context)
+                            return@OutlinedButton
+                        }
+                        activity?.let {
+                            RewardedAdManager.show(
+                                activity   = it,
+                                onRewarded = { showSimulation = true },
+                                onDismissed = {}
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.PlayCircle, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Simuler ma note cible")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Text(
+                            "PUB",
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+                if (adNotReady) {
+                    Text(
+                        "Pub en cours de chargement, réessayez dans quelques secondes.",
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                    )
                 }
             }
 

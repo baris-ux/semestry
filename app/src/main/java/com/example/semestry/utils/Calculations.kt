@@ -35,6 +35,52 @@ fun computeEffectiveNote(entry: GradeEntry): Double? =
     if (entry.isComposite) computeCompositeNote(entry.subGrades)
     else entry.note.replace(",", ".").toDoubleOrNull()?.takeIf { it in 0.0..20.0 }
 
+// Grade needed in one course to reach a target semester average — null if other grades are missing.
+fun simulateNeededGrade(ues: List<UE>, targetUeIndex: Int, targetCourseIndex: Int, targetAvg: Double): Double? {
+    val targetUE      = ues.getOrNull(targetUeIndex) ?: return null
+    val targetCourse  = targetUE.courses.getOrNull(targetCourseIndex) ?: return null
+    val targetCoeff   = effectiveCoeff(targetCourse) ?: return null
+
+    val totalCoeff = ues.sumOf { ue -> ue.courses.sumOf { effectiveCoeff(it) ?: 0.0 } }
+    if (totalCoeff <= 0) return null
+
+    var otherUEsWeightedSum = 0.0
+    for ((i, ue) in ues.withIndex()) {
+        if (i == targetUeIndex) continue
+        val avg   = computeUEAverage(ue) ?: return null
+        val coeff = ue.courses.sumOf { effectiveCoeff(it) ?: 0.0 }
+        otherUEsWeightedSum += avg * coeff
+    }
+
+    return when (targetUE.moyenneType) {
+        MoyenneType.ARITHMETIQUE -> {
+            var otherCoursesSum = 0.0
+            for ((j, course) in targetUE.courses.withIndex()) {
+                if (j == targetCourseIndex) continue
+                val note  = computeEffectiveNote(course) ?: return null
+                val coeff = effectiveCoeff(course) ?: return null
+                otherCoursesSum += note * coeff
+            }
+            (targetAvg * totalCoeff - otherUEsWeightedSum - otherCoursesSum) / targetCoeff
+        }
+        MoyenneType.GEOMETRIQUE -> {
+            val ueCoeff = targetUE.courses.sumOf { effectiveCoeff(it) ?: 0.0 }
+            if (ueCoeff <= 0) return null
+            var otherProduct = 1.0
+            for ((j, course) in targetUE.courses.withIndex()) {
+                if (j == targetCourseIndex) continue
+                val note  = computeEffectiveNote(course) ?: return null
+                val coeff = effectiveCoeff(course) ?: return null
+                if (note <= 0) return null
+                otherProduct *= note.pow(coeff)
+            }
+            val ueAvgTarget = (targetAvg * totalCoeff - otherUEsWeightedSum) / ueCoeff
+            if (ueAvgTarget <= 0) return null
+            (ueAvgTarget.pow(ueCoeff) / otherProduct).pow(1.0 / targetCoeff)
+        }
+    }
+}
+
 // Weighted average of all courses in a UE — null if any course is unfilled or geo-zero.
 fun computeUEAverage(ue: UE): Double? {
     if (ue.courses.isEmpty()) return null
